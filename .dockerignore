@@ -1,0 +1,53 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+.venv
+
+# Environment files
+.env
+.env.local
+*.env
+
+# Git
+.git/
+.gitignore
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Project specific
+uploads/
+outputs/
+*.pdf
+*.mp3
+*.wav
+flagged/
+gradio_cached_examples/
+
+# Logs
+*.log
+logs/
+
+# Tests
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Documentation
+*.md
+docs/
+
+# Node (if accidentally in root)
+node_modules/
+
+# Mac
+.DS_Store
