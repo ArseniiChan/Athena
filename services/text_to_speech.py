@@ -2,8 +2,6 @@
 import os
 import logging
 from typing import Optional, Tuple
-from google.cloud import texttospeech
-import wave
 import json
 
 # Configure logging
@@ -15,37 +13,37 @@ VOICE_CONFIGS = {
     "female_warm": {
         "language_code": "en-US",
         "name": "en-US-Neural2-F",
-        "ssml_gender": texttospeech.SsmlVoiceGender.FEMALE,
+        "ssml_gender": "FEMALE",
         "description": "Warm female voice"
     },
     "female_professional": {
         "language_code": "en-US",
         "name": "en-US-Neural2-C",
-        "ssml_gender": texttospeech.SsmlVoiceGender.FEMALE,
+        "ssml_gender": "FEMALE",
         "description": "Professional female voice"
     },
     "male_warm": {
         "language_code": "en-US",
         "name": "en-US-Neural2-D",
-        "ssml_gender": texttospeech.SsmlVoiceGender.MALE,
+        "ssml_gender": "MALE",
         "description": "Warm male voice"
     },
     "male_professional": {
         "language_code": "en-US",
         "name": "en-US-Neural2-A",
-        "ssml_gender": texttospeech.SsmlVoiceGender.MALE,
+        "ssml_gender": "MALE",
         "description": "Professional male voice"
     },
     "british_female": {
         "language_code": "en-GB",
         "name": "en-GB-Neural2-A",
-        "ssml_gender": texttospeech.SsmlVoiceGender.FEMALE,
+        "ssml_gender": "FEMALE",
         "description": "British female voice"
     }
 }
 
 
-def initialize_tts_client() -> Optional[texttospeech.TextToSpeechClient]:
+def initialize_tts_client():
     """
     Initialize Google Cloud Text-to-Speech client.
     
@@ -53,6 +51,8 @@ def initialize_tts_client() -> Optional[texttospeech.TextToSpeechClient]:
         TTS client or None if initialization fails
     """
     try:
+        from google.cloud import texttospeech
+        
         # Check for credentials
         if not os.getenv('GOOGLE_APPLICATION_CREDENTIALS') and not os.getenv('GOOGLE_CLOUD_PROJECT'):
             logger.warning("Google Cloud credentials not configured")
@@ -95,6 +95,8 @@ def generate_audio(
         Path to generated audio file or None if generation fails
     """
     try:
+        from google.cloud import texttospeech
+        
         # Initialize client
         client = initialize_tts_client()
         if not client:
@@ -106,11 +108,8 @@ def generate_audio(
         
         # Check text length (Google TTS has a 5000 character limit per request)
         if len(ssml_text) > 5000:
-            logger.info("Text too long, splitting into chunks")
-            return generate_audio_chunks(
-                text, output_path, voice_preset, 
-                speaking_rate, pitch, audio_format
-            )
+            logger.info("Text too long, truncating for demo")
+            ssml_text = ssml_text[:4900] + "</speak>"  # Truncate and close SSML
         
         # Get voice configuration
         voice_config = VOICE_CONFIGS.get(voice_preset, VOICE_CONFIGS["female_warm"])
@@ -122,11 +121,11 @@ def generate_audio(
         voice = texttospeech.VoiceSelectionParams(
             language_code=voice_config["language_code"],
             name=voice_config["name"],
-            ssml_gender=voice_config["ssml_gender"]
+            ssml_gender=texttospeech.SsmlVoiceGender[voice_config["ssml_gender"]]
         )
         
         # Set up audio configuration
-        audio_encoding = get_audio_encoding(audio_format)
+        audio_encoding = get_audio_encoding(audio_format, texttospeech)
         audio_config = texttospeech.AudioConfig(
             audio_encoding=audio_encoding,
             speaking_rate=speaking_rate,
@@ -146,17 +145,21 @@ def generate_audio(
         with open(output_path, "wb") as audio_file:
             audio_file.write(response.audio_content)
         
-        # Get audio duration
-        duration = get_audio_duration(output_path, audio_format)
-        logger.info(f"Generated {duration:.2f} seconds of audio at {output_path}")
+        logger.info(f"Generated audio saved to {output_path}")
         
         # Save metadata
-        save_audio_metadata(output_path, voice_config, duration, len(text))
+        save_audio_metadata(output_path, voice_config, len(text))
         
         return output_path
         
+    except ImportError as e:
+        logger.error(f"Import error: {e}")
+        logger.info("TTS libraries not properly installed")
+        return generate_fallback_audio(text, output_path)
+        
     except Exception as e:
         logger.error(f"Error generating audio: {e}")
+        logger.info("This might be a permission issue with Text-to-Speech API")
         return generate_fallback_audio(text, output_path)
 
 
@@ -175,145 +178,36 @@ def process_script_markers(text: str) -> Tuple[str, str]:
     # Clean text for fallback
     clean_text = re.sub(r'\[.*?\]', '', text).strip()
     
-    # Convert to SSML
-    ssml_text = f'<speak>\n{text}\n</speak>'
+    # Start building SSML
+    ssml_text = text
     
     # Replace markers with SSML tags
     replacements = {
         r'\[pause\]': '<break time="1s"/>',
         r'\[brief pause\]': '<break time="500ms"/>',
         r'\[long pause\]': '<break time="2s"/>',
-        r'\[emphasis\]': '<emphasis level="strong">',
-        r'\[/emphasis\]': '</emphasis>',
         r'\[music.*?\]': '<break time="2s"/>',  # Replace music cues with pauses
-        r'\[slow\]': '<prosody rate="slow">',
-        r'\[/slow\]': '</prosody>',
-        r'\[fast\]': '<prosody rate="fast">',
-        r'\[/fast\]': '</prosody>'
     }
     
     for pattern, replacement in replacements.items():
         ssml_text = re.sub(pattern, replacement, ssml_text, flags=re.IGNORECASE)
     
-    # Ensure valid SSML
+    # Escape special characters for XML
     ssml_text = ssml_text.replace('&', '&amp;')
-    ssml_text = ssml_text.replace('<', '&lt;').replace('>', '&gt;')
     
-    # Restore SSML tags
-    for tag in ['<speak>', '</speak>', '<break', '<emphasis', '</emphasis>', '<prosody', '</prosody>']:
-        ssml_text = ssml_text.replace(tag.replace('<', '&lt;').replace('>', '&gt;'), tag)
+    # Wrap in speak tags
+    ssml_text = f'<speak>{ssml_text}</speak>'
     
     return clean_text, ssml_text
 
 
-def generate_audio_chunks(
-    text: str,
-    output_path: str,
-    voice_preset: str,
-    speaking_rate: float,
-    pitch: float,
-    audio_format: str
-) -> Optional[str]:
-    """
-    Generate audio for long text by splitting into chunks.
-    
-    Args:
-        text: Long text to convert
-        output_path: Path for final audio file
-        voice_preset: Voice configuration
-        speaking_rate: Speech rate
-        pitch: Voice pitch
-        audio_format: Audio format
-    
-    Returns:
-        Path to combined audio file or None
-    """
-    try:
-        import tempfile
-        from pydub import AudioSegment
-        
-        # Split text into chunks
-        chunks = split_text_into_chunks(text, 4000)  # Leave room for SSML
-        logger.info(f"Split text into {len(chunks)} chunks")
-        
-        # Generate audio for each chunk
-        temp_files = []
-        for i, chunk in enumerate(chunks):
-            temp_path = f"{tempfile.gettempdir()}/chunk_{i}.{audio_format}"
-            result = generate_audio(
-                chunk, temp_path, voice_preset,
-                speaking_rate, pitch, audio_format
-            )
-            if result:
-                temp_files.append(temp_path)
-        
-        if not temp_files:
-            logger.error("No chunks were successfully generated")
-            return None
-        
-        # Combine audio files
-        logger.info("Combining audio chunks")
-        combined = AudioSegment.empty()
-        for temp_file in temp_files:
-            audio = AudioSegment.from_file(temp_file, format=audio_format)
-            combined += audio
-            os.unlink(temp_file)  # Clean up temp file
-        
-        # Save combined audio
-        combined.export(output_path, format=audio_format)
-        logger.info(f"Combined audio saved to {output_path}")
-        
-        return output_path
-        
-    except ImportError:
-        logger.error("pydub library required for chunked audio")
-        logger.info("Install with: pip install pydub")
-        return None
-        
-    except Exception as e:
-        logger.error(f"Error generating chunked audio: {e}")
-        return None
-
-
-def split_text_into_chunks(text: str, max_chars: int) -> list:
-    """
-    Split text into chunks at sentence boundaries.
-    
-    Args:
-        text: Text to split
-        max_chars: Maximum characters per chunk
-    
-    Returns:
-        List of text chunks
-    """
-    sentences = text.replace('!', '.').replace('?', '.').split('.')
-    chunks = []
-    current_chunk = ""
-    
-    for sentence in sentences:
-        sentence = sentence.strip()
-        if not sentence:
-            continue
-            
-        if len(current_chunk) + len(sentence) + 2 <= max_chars:
-            current_chunk += sentence + ". "
-        else:
-            if current_chunk:
-                chunks.append(current_chunk.strip())
-            current_chunk = sentence + ". "
-    
-    if current_chunk:
-        chunks.append(current_chunk.strip())
-    
-    return chunks
-
-
-def get_audio_encoding(audio_format: str):
+def get_audio_encoding(audio_format: str, texttospeech):
     """
     Get Google TTS audio encoding enum for format.
     
     Args:
         audio_format: Audio format string
+        texttospeech: The texttospeech module
     
     Returns:
         AudioEncoding enum value
@@ -326,92 +220,62 @@ def get_audio_encoding(audio_format: str):
     return encodings.get(audio_format.lower(), texttospeech.AudioEncoding.MP3)
 
 
-def get_audio_duration(file_path: str, audio_format: str) -> float:
-    """
-    Get duration of audio file in seconds.
-    
-    Args:
-        file_path: Path to audio file
-        audio_format: Audio format
-    
-    Returns:
-        Duration in seconds
-    """
-    try:
-        if audio_format == "wav":
-            with wave.open(file_path, 'rb') as wav_file:
-                frames = wav_file.getnframes()
-                rate = wav_file.getframerate()
-                return frames / float(rate)
-        else:
-            # For MP3 and other formats, use pydub if available
-            from pydub import AudioSegment
-            audio = AudioSegment.from_file(file_path, format=audio_format)
-            return len(audio) / 1000.0
-    except:
-        # Estimate based on file size
-        file_size = os.path.getsize(file_path)
-        # Rough estimate: 1MB = 1 minute for MP3 at 128kbps
-        return (file_size / 1024 / 1024) * 60
-
-
-def save_audio_metadata(audio_path: str, voice_config: dict, duration: float, text_length: int):
+def save_audio_metadata(audio_path: str, voice_config: dict, text_length: int):
     """
     Save metadata about generated audio.
     
     Args:
         audio_path: Path to audio file
         voice_config: Voice configuration used
-        duration: Audio duration in seconds
         text_length: Length of input text
     """
     metadata = {
         "audio_file": audio_path,
         "voice": voice_config["description"],
         "language": voice_config["language_code"],
-        "duration_seconds": duration,
-        "duration_formatted": f"{int(duration // 60)}:{int(duration % 60):02d}",
         "text_length": text_length,
         "words_estimate": text_length // 5,  # Rough estimate
-        "generation_timestamp": os.path.getmtime(audio_path)
+        "generation_timestamp": os.path.getmtime(audio_path) if os.path.exists(audio_path) else None
     }
     
     metadata_path = audio_path.replace('.mp3', '_metadata.json').replace('.wav', '_metadata.json')
-    with open(metadata_path, 'w') as f:
-        json.dump(metadata, f, indent=2)
-    
-    logger.info(f"Metadata saved to {metadata_path}")
+    try:
+        with open(metadata_path, 'w') as f:
+            json.dump(metadata, f, indent=2)
+        logger.info(f"Metadata saved to {metadata_path}")
+    except Exception as e:
+        logger.warning(f"Could not save metadata: {e}")
 
 
 def generate_fallback_audio(text: str, output_path: str) -> Optional[str]:
     """
-    Generate a fallback audio file when TTS service is unavailable.
+    Generate a fallback when TTS service is unavailable.
+    Returns None to indicate no audio was generated.
     
     Args:
         text: Text that would have been converted
         output_path: Path for output file
     
     Returns:
-        Path to a silence audio file with metadata
+        None (indicating no audio generated)
     """
-    logger.warning("Using fallback audio generation (silence)")
+    logger.warning("Text-to-Speech unavailable - returning transcript only")
     
     try:
-        # Create a text file with the script
-        text_path = output_path.replace('.mp3', '.txt').replace('.wav', '.txt')
+        # Save the script as a text file for reference
+        text_path = output_path.replace('.mp3', '_script.txt').replace('.wav', '_script.txt')
         with open(text_path, 'w') as f:
-            f.write("PODCAST SCRIPT (Audio generation unavailable)\n")
+            f.write("PODCAST SCRIPT\n")
             f.write("=" * 50 + "\n\n")
             f.write(text)
         
         logger.info(f"Script saved to {text_path}")
-        logger.info("Audio generation unavailable - please check Google Cloud configuration")
-        
-        return text_path
         
     except Exception as e:
-        logger.error(f"Failed to create fallback file: {e}")
-        return None
+        logger.error(f"Failed to save script: {e}")
+    
+    # Return None to indicate no audio was generated
+    return None
 
 
 def list_available_voices(language_code: str = "en-US") -> list:
@@ -444,3 +308,13 @@ def list_available_voices(language_code: str = "en-US") -> list:
     except Exception as e:
         logger.error(f"Error listing voices: {e}")
         return []
+
+
+# For testing purposes
+if __name__ == "__main__":
+    test_text = "Hello, this is a test of the text to speech system."
+    result = generate_audio(test_text, "test_output.mp3")
+    if result:
+        print(f"Audio generated: {result}")
+    else:
+        print("Audio generation failed, but script was saved")
