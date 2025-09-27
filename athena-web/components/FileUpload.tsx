@@ -5,62 +5,84 @@ import { toast } from "sonner"
 
 type Props = {
   onValidFile: (file: File) => void
-  maxSizeMB?: number
 }
 
-export default function FileUpload({ onValidFile, maxSizeMB = 25 }: Props) {
-  const inputRef = useRef<HTMLInputElement>(null)
-  const [dragOver, setDragOver] = useState(false)
+export default function FileUpload({ onValidFile }: Props) {
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const [selectedFile, setSelectedFile] = useState<string | null>(null)
+  const [isDragging, setIsDragging] = useState(false)
 
-  const accept = "application/pdf"
-
-  const validate = (f: File) => {
-    const isPdf = f.type === accept || f.name.toLowerCase().endsWith(".pdf")
-    if (!isPdf) {
-      toast.error("Only PDF files are allowed")
-      return false
+  const handleFile = (file: File) => {
+    if (!file.type.includes("pdf")) {
+      toast.error("Please upload a PDF file")
+      return
     }
-    const tooBig = f.size > maxSizeMB * 1024 * 1024
-    if (tooBig) {
-      toast.error(`File is too large. Max ${maxSizeMB}MB`)
-      return false
+    if (file.size > 25 * 1024 * 1024) {
+      toast.error("File too large. Max size is 25MB")
+      return
     }
-    return true
+    setSelectedFile(file.name)
+    onValidFile(file)
+    toast.success(`Loaded: ${file.name}`)
   }
 
-  const handleFiles = (files?: FileList | null) => {
-    const f = files?.[0]
-    if (!f) return
-    if (!validate(f)) return
-    onValidFile(f)
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDragging(false)
+    const file = e.dataTransfer.files[0]
+    if (file) handleFile(file)
+  }
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) handleFile(file)
   }
 
   return (
     <div
-      className={`upload-area ${dragOver ? "ring-2 ring-black/50" : ""}`}
-      onClick={() => inputRef.current?.click()}
-      onDragOver={(e) => { e.preventDefault(); setDragOver(true) }}
-      onDragLeave={() => setDragOver(false)}
-      onDrop={(e) => { e.preventDefault(); setDragOver(false); handleFiles(e.dataTransfer.files) }}
-      role="button"
-      aria-label="Upload PDF"
+      className={`border-2 border-dashed rounded-xl p-12 text-center transition-colors ${
+        isDragging ? "border-blue-500 bg-blue-50" : "border-gray-300"
+      } ${selectedFile ? "bg-green-50 border-green-400" : ""}`}
+      onDragOver={(e) => {
+        e.preventDefault()
+        setIsDragging(true)
+      }}
+      onDragLeave={() => setIsDragging(false)}
+      onDrop={handleDrop}
+      onClick={() => fileInputRef.current?.click()}
     >
-      <svg className="upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
-        strokeLinecap="round" strokeLinejoin="round">
-        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-        <polyline points="17 8 12 3 7 8"></polyline>
-        <line x1="12" y1="3" x2="12" y2="15"></line>
-      </svg>
-      <div className="upload-text">Drop your PDF here or click to browse</div>
-      <div className="upload-subtext">PDF only • up to {maxSizeMB}MB</div>
-
       <input
-        ref={inputRef}
+        ref={fileInputRef}
         type="file"
-        accept={accept}
+        accept=".pdf"
+        onChange={handleFileSelect}
         className="hidden"
-        onChange={(e) => handleFiles(e.currentTarget.files)}
       />
+      <svg
+        className="mx-auto h-12 w-12 text-gray-400 mb-4"
+        fill="none"
+        viewBox="0 0 24 24"
+        stroke="currentColor"
+      >
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth={2}
+          d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
+        />
+      </svg>
+      {selectedFile ? (
+        <div>
+          <p className="text-lg font-medium text-green-600">File loaded:</p>
+          <p className="text-sm text-gray-600 mt-1">{selectedFile}</p>
+          <p className="text-xs text-gray-500 mt-2">Click to change file</p>
+        </div>
+      ) : (
+        <>
+          <p className="text-lg font-medium">Drop your PDF here or click to browse</p>
+          <p className="text-sm text-gray-500 mt-2">PDF only • up to 25MB</p>
+        </>
+      )}
     </div>
   )
 }

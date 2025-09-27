@@ -114,7 +114,7 @@ export default function Home() {
     }, 3000)
   }
 
-  // Generate → call /api/convert
+  // Generate → call /api/process (FIXED!)
   const onGenerate = async () => {
     if (!file) return toast.error("Please upload a PDF first.")
     setLoading(true)
@@ -124,16 +124,32 @@ export default function Home() {
       const fd = new FormData()
       fd.append("file", file)
       fd.append("style", style)
-      fd.append("speed", String(speed))
+      fd.append("speaking_rate", String(speed))  // FIXED: was "speed"
+      fd.append("voice_preset", "female_warm")
+      fd.append("duration_minutes", "5")
 
-      const res = await fetch("/api/convert", { method: "POST", body: fd })
+      const res = await fetch("/api/process", { method: "POST", body: fd })  // FIXED: was "/api/convert"
       const json = await res.json()
-      if (!res.ok) throw new Error(json?.error || "Failed to convert")
+      
+      if (!res.ok) throw new Error(json?.error || "Failed to process PDF")
 
-      setAudioUrl(json.audioUrl)
-      setScript(json.script)
-      toast.success("Your podcast is ready 🎧")
-      document.querySelector(".cta")?.scrollIntoView({ behavior: "smooth" })
+      // Handle the response from backend
+      if (json.success) {
+        setAudioUrl(json.audioUrl)
+        setScript(json.transcript)  // FIXED: was json.script
+        
+        // Show appropriate message based on whether audio was generated
+        if (json.audioUrl) {
+          toast.success("Your podcast is ready 🎧")
+        } else if (json.transcript) {
+          toast.success("Script generated! (Audio generation in progress)")
+        }
+      } else {
+        throw new Error(json.error || "Processing failed")
+      }
+      
+      // Scroll to output section
+      document.querySelector(".demo-content")?.scrollIntoView({ behavior: "smooth" })
     } catch (err: any) {
       toast.error(err.message || "Something went wrong")
     } finally {
@@ -211,6 +227,13 @@ export default function Home() {
                 {/* Drag/click upload with PDF-only+size validation */}
                 <FileUpload onValidFile={setFile} />
 
+                {/* Show filename when file is selected */}
+                {file && (
+                  <div style={{ color: "green", fontSize: "14px" }}>
+                    ✓ File loaded: {file.name}
+                  </div>
+                )}
+
                 {/* Style + Speed controls */}
                 <div style={{ width: "100%", maxWidth: 600 }}>
                   <Controls
@@ -225,7 +248,7 @@ export default function Home() {
                 <button
                   className="btn btn-primary"
                   onClick={onGenerate}
-                  disabled={loading}
+                  disabled={loading || !file}
                 >
                   {loading ? "Generating..." : "Generate Podcast"}
                 </button>
@@ -284,7 +307,7 @@ export default function Home() {
               "Export your podcasts as MP3 files to listen offline. Share with study groups or save for future review sessions.",
             ],
           ].map(([num, title, desc], i) => (
-            <div className="feature" style={{ ["--index" as any]: i }} key={i}>
+            <div className="feature" style={{ "--index": i } as React.CSSProperties} key={i}>
               <div className="feature-number">{num}</div>
               <h3 className="feature-title">{title}</h3>
               <p className="feature-description">{desc}</p>
@@ -347,7 +370,7 @@ export default function Home() {
             Join thousands of students studying smarter with Athena
           </p>
           <button className="btn btn-primary" onClick={handleGetStarted}>
-            Start now — it's free
+            Start now — it&apos;s free
           </button>
         </div>
       </section>

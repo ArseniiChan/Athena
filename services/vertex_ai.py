@@ -49,12 +49,14 @@ def initialize_vertex_ai() -> bool:
             logger.error("GOOGLE_CLOUD_PROJECT environment variable not set")
             return False
         
+        logger.info(f"Attempting to init Vertex AI with project={project_id}, location={location}")
         vertexai.init(project=project_id, location=location)
-        logger.info(f"Initialized Vertex AI for project {project_id} in {location}")
+        logger.info(f"✓ Successfully initialized Vertex AI for project {project_id} in {location}")
         return True
         
     except Exception as e:
-        logger.error(f"Failed to initialize Vertex AI: {e}")
+        logger.error(f"✗ Failed to initialize Vertex AI: {type(e).__name__}: {e}")
+        logger.error(f"  Check if Vertex AI API is enabled in project {os.getenv('GOOGLE_CLOUD_PROJECT')}")
         return False
 
 
@@ -79,14 +81,29 @@ def generate_podcast_script(
         Generated podcast script or None if generation fails
     """
     try:
+        # Debug logging
+        logger.info("=" * 50)
+        logger.info("Starting podcast script generation...")
+        logger.info(f"Style: {style}, Duration: {duration_minutes} minutes")
+        logger.info(f"Text preview (first 200 chars): {text[:200]}...")
+        
         # Initialize Vertex AI if not already done
         if not initialize_vertex_ai():
-            logger.error("Cannot proceed without Vertex AI initialization")
+            logger.error("✗ Vertex AI initialization failed - using fallback")
+            logger.error("  Make sure to run: gcloud services enable aiplatform.googleapis.com")
             return generate_fallback_script(text, style)
         
         # Select model
         model_name = os.getenv('VERTEX_AI_MODEL', 'gemini-1.5-flash')
-        model = GenerativeModel(model_name)
+        logger.info(f"Creating model: {model_name}")
+        
+        try:
+            model = GenerativeModel(model_name)
+            logger.info(f"✓ Model '{model_name}' created successfully")
+        except Exception as model_error:
+            logger.error(f"✗ Failed to create model: {model_error}")
+            logger.error(f"  Try using 'gemini-1.5-flash-001' or 'gemini-1.5-pro' in your .env")
+            return generate_fallback_script(text, style)
         
         # Get style configuration
         style_config = STYLE_PROMPTS.get(style, STYLE_PROMPTS["conversational"])
@@ -104,32 +121,37 @@ def generate_podcast_script(
             include_outro
         )
         
+        logger.info(f"Prompt created, length: {len(prompt)} chars")
+        
         # Generate content
-        logger.info(f"Generating {duration_minutes}-minute {style} podcast script")
+        logger.info(f"Calling Gemini API to generate {target_words}-word script...")
         response = model.generate_content(
             prompt,
             generation_config={
-                "temperature": 0.7,
-                "top_p": 0.8,
+                "temperature": 0.8,  # Slightly higher for more creativity
+                "top_p": 0.85,
                 "top_k": 40,
                 "max_output_tokens": min(8192, target_words * 2),
             }
         )
         
-        if not response.text:
-            logger.warning("Empty response from Vertex AI")
+        if not response or not response.text:
+            logger.warning("✗ Empty response from Vertex AI")
             return generate_fallback_script(text, style)
         
-        logger.info(f"Successfully generated script with {len(response.text.split())} words")
+        logger.info(f"✓ Successfully generated script with {len(response.text.split())} words")
+        logger.info(f"Response preview: {response.text[:200]}...")
         return format_podcast_script(response.text)
         
-    except ImportError:
-        logger.error("Vertex AI library not installed")
-        logger.info("Install with: pip install google-cloud-aiplatform")
+    except ImportError as e:
+        logger.error(f"✗ Import error: {e}")
+        logger.error("  Vertex AI library not installed properly")
+        logger.info("  Run: pip install google-cloud-aiplatform")
         return generate_fallback_script(text, style)
         
     except Exception as e:
-        logger.error(f"Error generating script with Vertex AI: {e}")
+        logger.error(f"✗ Unexpected error generating script: {type(e).__name__}: {e}")
+        logger.error(f"  Full error: {str(e)}")
         return generate_fallback_script(text, style)
 
 
@@ -159,7 +181,15 @@ def create_podcast_prompt(
         text = text[:max_input_chars] + "..."
         logger.info(f"Truncated input text to {max_input_chars} characters")
     
-    prompt = f"""You are an expert podcast scriptwriter. Convert the following educational content into an engaging podcast script.
+    prompt = f"""You are an expert podcast host who transforms academic content into engaging audio experiences.
+
+CRITICAL INSTRUCTIONS:
+- DO NOT simply read the document verbatim or quote it directly
+- DO NOT say things like "the document states" or "according to the text"
+- CREATE an engaging narrative that teaches the concepts
+- EXPLAIN ideas in your own words as if you're having a conversation
+- USE analogies, examples, and storytelling to make concepts memorable
+- SYNTHESIZE the information into insights, not just repeat facts
 
 STYLE REQUIREMENTS:
 - Description: {style_config['description']}
@@ -168,50 +198,63 @@ STYLE REQUIREMENTS:
 
 SCRIPT REQUIREMENTS:
 - Target length: approximately {target_words} words ({target_words // 150} minutes of speaking)
-- Speaking style: Natural, conversational flow with clear transitions
-- Audience: General audience interested in learning
+- Speaking style: Like you're explaining to a friend who's genuinely interested
+- Audience: Someone who wants to understand the topic, not just hear it read
 
 STRUCTURE:
 """
     
     if include_intro:
         prompt += """
-1. INTRODUCTION (10% of script):
-   - Hook the listener with an interesting question or fact
-   - Preview what will be covered
-   - Set the tone and expectations
+1. INTRODUCTION (15% of script):
+   - Start with a relatable hook or interesting question
+   - Connect the topic to real-world applications
+   - Give listeners a reason to care about this topic
+   - Preview the main insights they'll gain
 """
     
     prompt += """
-2. MAIN CONTENT (80% of script):
-   - Break down complex ideas into digestible segments
-   - Use analogies and examples to illustrate points
-   - Include natural transitions between topics
-   - Add rhetorical questions to engage listeners
-   - Include brief pauses for emphasis [pause]
+2. MAIN CONTENT (70% of script):
+   - Transform key concepts into conversational explanations
+   - Use "Let me explain this differently..." or "Think of it this way..."
+   - Add personal touches like "What I find fascinating is..."
+   - Include rhetorical questions: "Ever wondered why...?"
+   - Use concrete examples and analogies
+   - Create a narrative thread that connects ideas
+   - Add [pause] markers for natural breathing spaces
+   - Build understanding progressively, don't just list facts
 """
     
     if include_outro:
         prompt += """
-3. CONCLUSION (10% of script):
-   - Summarize key takeaways
-   - Provide actionable insights or next steps
-   - End with a memorable statement or call-to-action
+3. CONCLUSION (15% of script):
+   - Synthesize the main insights (don't just repeat them)
+   - Explain why these concepts matter in the bigger picture
+   - Suggest how listeners can apply or explore these ideas further
+   - End with a thought-provoking question or memorable insight
 """
     
     prompt += f"""
 
-FORMATTING GUIDELINES:
-- Use [pause] for dramatic pauses
-- Use [emphasis] for words that should be stressed
-- Include [music] cues for intro/outro music
-- Write in a natural speaking style with contractions
-- Avoid overly complex sentences
+EXAMPLES OF GOOD TRANSFORMATIONS:
+BAD (verbatim): "The document states that mitochondria are the powerhouse of the cell."
+GOOD (engaging): "You know how a city needs power plants to keep the lights on? Well, your cells have their own tiny power plants called mitochondria, and they're absolutely fascinating..."
 
-SOURCE CONTENT:
+BAD (reading): "Section 2.3 discusses three types of market structures."
+GOOD (conversational): "So imagine you're starting a business. The success you'll have depends hugely on what kind of market you're entering. Let me walk you through three completely different scenarios..."
+
+FORMATTING:
+- Use [pause] for natural breaks
+- Use [emphasis] sparingly for key words
+- Start with [music fade in] and end with [music fade out]
+- Write conversationally with contractions (it's, we'll, you're)
+
+SOURCE CONTENT TO TRANSFORM (not read):
 {text}
 
-GENERATE THE PODCAST SCRIPT:
+REMEMBER: You're a podcast host sharing fascinating insights, not a text-to-speech robot. Make this content come alive through storytelling and explanation.
+
+GENERATE THE ENGAGING PODCAST SCRIPT:
 """
     
     return prompt
@@ -252,21 +295,24 @@ def generate_fallback_script(text: str, style: str) -> str:
     Returns:
         Basic podcast script
     """
-    logger.info("Using fallback script generation")
+    logger.info("Using fallback script generation (Vertex AI not available)")
     
-    # Extract first meaningful portion of text
-    excerpt = text[:1500].strip()
+    # Extract key points from text (first 1000 chars)
+    excerpt = text[:1000].strip()
     
-    # Create a basic script based on style
+    # Identify the topic (usually in first few sentences)
+    first_sentence = excerpt.split('.')[0] if '.' in excerpt else excerpt[:100]
+    
+    # Create a basic but engaging script based on style
     if style == "academic":
-        intro = "Welcome to today's educational podcast. We'll be exploring important concepts from the source material."
-        tone = "Let's examine this content systematically."
+        intro = "Welcome to today's educational podcast where we explore fascinating academic concepts."
+        tone = "Let's dive deep into understanding"
     elif style == "simple":
-        intro = "Hi there! Welcome to our learning podcast. Today we're going to break down some interesting ideas in a simple way."
-        tone = "Let me explain this in simple terms."
+        intro = "Hey there! Welcome to our learning podcast where we make complex ideas simple and fun."
+        tone = "Let me break this down in a way that just makes sense"
     else:  # conversational
-        intro = "Hey everyone! Welcome back to the podcast. Today we've got some fascinating material to discuss."
-        tone = "So here's what caught my attention."
+        intro = "Hey everyone! Welcome back. Today we're diving into something really interesting."
+        tone = "So here's what really caught my attention"
     
     script = f"""[music fade in]
 
@@ -274,15 +320,27 @@ def generate_fallback_script(text: str, style: str) -> str:
 
 [pause]
 
-{tone}
+Today's topic is all about {first_sentence.lower()}. {tone}.
+
+[pause]
+
+Think about it this way - we encounter these concepts every day, but rarely stop to understand what's really happening behind the scenes. That's what we're going to explore today.
+
+[pause]
 
 {excerpt}
 
 [pause]
 
-What we've covered today provides valuable insights into this topic. The key takeaway here is the importance of understanding these concepts and how they apply to our broader understanding.
+What I find most fascinating about this is how it connects to our everyday experiences. These aren't just abstract concepts - they're principles that shape the world around us.
 
-Thank you for listening to today's episode. If you found this helpful, consider exploring the source material further for a deeper understanding.
+The key insight here is understanding not just what happens, but why it matters. When you grasp these fundamentals, suddenly a lot of other things start to make sense too.
+
+[pause]
+
+So next time you encounter this topic, remember what we discussed today. Think about the bigger picture and how these pieces fit together.
+
+Thanks for joining me on this exploration. Until next time, keep questioning, keep learning, and keep discovering.
 
 [music fade out]"""
     

@@ -1,0 +1,41 @@
+PODCAST SCRIPT (Audio generation unavailable)
+==================================================
+
+Hey everyone! Welcome back to the podcast. Today we've got some fascinating material to discuss.
+
+
+
+So here's what caught my attention.
+
+--- Page 1 ---
+Objective:  This assignment will deepen your understanding of the fork() and pipe() system calls by 
+requiring you to orchestrate communication between three related processes.  
+Problem Statement:  Develop a C program that performs the following steps:  
+1. The main (parent) process creates a pipe.  
+2. The parent then forks two children. The first child created will be Child A, and the second 
+will be Child B. 
+3. Child A will fork its own child, Child C. 
+4. The three children will use the parent's pipe for communication as follows:  
+o Child B: This process will read a predefined string from the user via standard input 
+(stdin). 
+o Child A: This process will read the string that Child B received from standard input 
+and then send it to Child C through the pipe.  
+o Child C: This process will read the message from the pipe and print it to standard 
+output (stdout). 
+5. All parent processes ( main and Child A) must wait for their respective children to terminate.  
+Requirements:  
+• Process Creation:  The main parent process must create Child A and Child B. Child A must 
+then create Child C. 
+• Inter-Process Communication:  
+o Child B must read a string from the user.  
+o The main process must be a parent to both Child A and Child B. The message should 
+be sent from Child B to Child A through standard input ( stdin). 
+o The message should be then sent from Child A to Child C through the pipe.  
+• Pipe and File Descriptor Management:  
+o The main parent proce
+
+
+
+What we've covered today provides valuable insights into this topic. The key takeaway here is the importance of understanding these concepts and how they apply to our broader understanding.
+
+Thank you for listening to today's episode. If you found this helpful, consider exploring the source material further for a deeper understanding.
