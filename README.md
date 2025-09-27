@@ -16,6 +16,9 @@ Athena is an AI-powered platform that converts PDF documents into natural-soundi
 - **Modern Web Interface**: Clean, responsive UI built with Next.js and TypeScript
 - **Accessibility Impact**: Perfect for auditory learners, students with dyslexia, or anyone studying on the go
 
+## Demo Video
+[![Watch the demo](https://img.youtube.com/vi/uJn69T-uYrI/0.jpg)](https://www.youtube.com/watch?v=uJn69T-uYrI)
+
 ## Hackathon Achievement
 
 Built in under 24 hours for BYTE Hackathon 2025, Athena demonstrates the power of Google Cloud AI services working in harmony to solve a real problem students face every day.
