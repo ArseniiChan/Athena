@@ -348,7 +348,7 @@ export default function Home() {
         <div className="tech-grid">
           {[
             "Vertex AI",
-            "Gemini 1.5 Pro",
+            "Gemini 2.0",
             "Document AI",
             "Cloud Text-to-Speech",
             "Cloud Run",
@@ -382,7 +382,7 @@ export default function Home() {
             © 2025 Athena. Built for Google Cloud Hackathon.
           </div>
           <div className="footer-links">
-            <a href="#" className="footer-link">
+            <a href="https://github.com/ArseniiChan/Athena" className="footer-link" target="_blank" rel="noopener noreferrer">
               GitHub
             </a>
             <a href="#" className="footer-link">
