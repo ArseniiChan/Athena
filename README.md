@@ -231,7 +231,6 @@ curl -X POST "http://localhost:8000/api/process" \
 - **Conversational**: Friendly and engaging, like explaining to a friend
 - **Academic**: Formal and detailed with technical accuracy  
 - **Simple**: Clear and beginner-friendly with frequent summaries
-- **Storytelling**: Narrative-driven with engaging anecdotes
 
 ### Voice Presets
 - Female Warm (en-US-Neural2-F)
