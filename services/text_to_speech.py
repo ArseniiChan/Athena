@@ -165,35 +165,64 @@ def generate_audio(
 
 def process_script_markers(text: str) -> Tuple[str, str]:
     """
-    Process podcast script markers and convert to SSML.
+    Process podcast script for TTS, ensuring clean output.
     
     Args:
-        text: Raw script text with markers
+        text: Raw script text
     
     Returns:
         Tuple of (clean text, SSML formatted text)
     """
     import re
     
-    # Clean text for fallback
-    clean_text = re.sub(r'\[.*?\]', '', text).strip()
+   # First, clean up any formatting artifacts that shouldn't be spoken
+    text = re.sub(r'\[.*?\]', '', text)  # Remove bracketed content
+    text = re.sub(r'\bdot dot dot\b', '...', text, flags=re.IGNORECASE)
+    text = re.sub(r'\bemphasis\b', '', text, flags=re.IGNORECASE)
+    text = re.sub(r'\bpause\b', '', text, flags=re.IGNORECASE)
+    text = re.sub(r'quote\s+unquote\s+(\w+)', r'"\1"', text, flags=re.IGNORECASE)
+    text = re.sub(r'\*+', '', text)
+    text = re.sub(r'_+', '', text)
+    text = re.sub(r'#+', '', text)
+
+    # Remove speaker labels like "Host:", "Speaker:", "Narrator:", etc.
+    text = re.sub(r'^\s*\*?\*?(Host|Speaker|Narrator|Interviewer|Guest|Voice):\*?\*?\s*', '', text, flags=re.IGNORECASE | re.MULTILINE)
+    text = re.sub(r'\n\s*\*?\*?(Host|Speaker|Narrator|Interviewer|Guest|Voice):\*?\*?\s*', '\n', text, flags=re.IGNORECASE)
     
-    # Start building SSML
+    # Clean up any TTS stage directions that might have leaked through
+    text = re.sub(r'\bmusic fade in\b', '', text, flags=re.IGNORECASE)
+    text = re.sub(r'\bmusic fade out\b', '', text, flags=re.IGNORECASE)
+    text = re.sub(r'\bbrief pause\b', '', text, flags=re.IGNORECASE)
+    text = re.sub(r'\blong pause\b', '', text, flags=re.IGNORECASE)
+    
+    # Clean up whitespace
+    text = re.sub(r'\s+', ' ', text)
+    text = text.strip()
+    
+    # Create clean version for fallback
+    clean_text = text
+    
+    # Build SSML version with natural pauses
     ssml_text = text
     
-    # Replace markers with SSML tags
-    replacements = {
-        r'\[pause\]': '<break time="1s"/>',
-        r'\[brief pause\]': '<break time="500ms"/>',
-        r'\[long pause\]': '<break time="2s"/>',
-        r'\[music.*?\]': '<break time="2s"/>',  # Replace music cues with pauses
-    }
+    # Add pauses at natural break points
+    # After sentences ending with periods
+    ssml_text = re.sub(r'([.!?])\s+', r'\1<break time="500ms"/> ', ssml_text)
     
-    for pattern, replacement in replacements.items():
-        ssml_text = re.sub(pattern, replacement, ssml_text, flags=re.IGNORECASE)
+    # Add slight pauses after commas
+    ssml_text = re.sub(r',\s+', r',<break time="200ms"/> ', ssml_text)
+    
+    # Convert ellipsis to longer pause
+    ssml_text = ssml_text.replace('...', '<break time="1s"/>')
     
     # Escape special characters for XML
     ssml_text = ssml_text.replace('&', '&amp;')
+    ssml_text = ssml_text.replace('<', '&lt;').replace('>', '&gt;')
+    
+    # Restore break tags that we just escaped
+    ssml_text = ssml_text.replace('&lt;break time="500ms"/&gt;', '<break time="500ms"/>')
+    ssml_text = ssml_text.replace('&lt;break time="200ms"/&gt;', '<break time="200ms"/>')
+    ssml_text = ssml_text.replace('&lt;break time="1s"/&gt;', '<break time="1s"/>')
     
     # Wrap in speak tags
     ssml_text = f'<speak>{ssml_text}</speak>'

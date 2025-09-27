@@ -2,12 +2,20 @@
 import os
 import logging
 from typing import Dict, Optional
-import vertexai
-from vertexai.generative_models import GenerativeModel
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Try to import Vertex AI, but don't fail if not available
+try:
+    import vertexai
+    from vertexai.generative_models import GenerativeModel
+    VERTEX_AI_AVAILABLE = True
+except ImportError:
+    VERTEX_AI_AVAILABLE = False
+    logger.warning("Vertex AI not available - using fallback script generation")
+
 
 # Style configurations
 STYLE_PROMPTS = {
@@ -41,6 +49,9 @@ def initialize_vertex_ai() -> bool:
     Returns:
         True if initialization successful, False otherwise
     """
+    if not VERTEX_AI_AVAILABLE:
+        return False
+        
     try:
         project_id = os.getenv('GOOGLE_CLOUD_PROJECT')
         location = os.getenv('GOOGLE_CLOUD_LOCATION', 'us-central1')
@@ -56,7 +67,6 @@ def initialize_vertex_ai() -> bool:
         
     except Exception as e:
         logger.error(f"✗ Failed to initialize Vertex AI: {type(e).__name__}: {e}")
-        logger.error(f"  Check if Vertex AI API is enabled in project {os.getenv('GOOGLE_CLOUD_PROJECT')}")
         return False
 
 
@@ -68,7 +78,7 @@ def generate_podcast_script(
     include_outro: bool = True
 ) -> Optional[str]:
     """
-    Generate a podcast script using Vertex AI Gemini model.
+    Generate a podcast script using Vertex AI Gemini model or fallback.
     
     Args:
         text: Source text to convert into podcast script
@@ -80,21 +90,19 @@ def generate_podcast_script(
     Returns:
         Generated podcast script or None if generation fails
     """
+    # If Vertex AI not available, use fallback immediately
+    if not VERTEX_AI_AVAILABLE:
+        logger.info("Using fallback script generation (Vertex AI not available)")
+        return generate_fallback_script(text, style)
+    
     try:
-        # Debug logging
-        logger.info("=" * 50)
-        logger.info("Starting podcast script generation...")
-        logger.info(f"Style: {style}, Duration: {duration_minutes} minutes")
-        logger.info(f"Text preview (first 200 chars): {text[:200]}...")
-        
         # Initialize Vertex AI if not already done
         if not initialize_vertex_ai():
             logger.error("✗ Vertex AI initialization failed - using fallback")
-            logger.error("  Make sure to run: gcloud services enable aiplatform.googleapis.com")
             return generate_fallback_script(text, style)
         
         # Select model
-        model_name = os.getenv('VERTEX_AI_MODEL', 'gemini-1.5-flash')
+        model_name = os.getenv('VERTEX_AI_MODEL', 'gemini-2.0-flash')
         logger.info(f"Creating model: {model_name}")
         
         try:
@@ -102,7 +110,6 @@ def generate_podcast_script(
             logger.info(f"✓ Model '{model_name}' created successfully")
         except Exception as model_error:
             logger.error(f"✗ Failed to create model: {model_error}")
-            logger.error(f"  Try using 'gemini-1.5-flash-001' or 'gemini-1.5-pro' in your .env")
             return generate_fallback_script(text, style)
         
         # Get style configuration
@@ -128,7 +135,7 @@ def generate_podcast_script(
         response = model.generate_content(
             prompt,
             generation_config={
-                "temperature": 0.8,  # Slightly higher for more creativity
+                "temperature": 0.8,
                 "top_p": 0.85,
                 "top_k": 40,
                 "max_output_tokens": min(8192, target_words * 2),
@@ -140,20 +147,11 @@ def generate_podcast_script(
             return generate_fallback_script(text, style)
         
         logger.info(f"✓ Successfully generated script with {len(response.text.split())} words")
-        logger.info(f"Response preview: {response.text[:200]}...")
         return format_podcast_script(response.text)
-        
-    except ImportError as e:
-        logger.error(f"✗ Import error: {e}")
-        logger.error("  Vertex AI library not installed properly")
-        logger.info("  Run: pip install google-cloud-aiplatform")
-        return generate_fallback_script(text, style)
         
     except Exception as e:
         logger.error(f"✗ Unexpected error generating script: {type(e).__name__}: {e}")
-        logger.error(f"  Full error: {str(e)}")
         return generate_fallback_script(text, style)
-
 
 def create_podcast_prompt(
     text: str,
