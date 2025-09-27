@@ -18,7 +18,7 @@ export default function FileUpload({ onValidFile }: Props) {
       return
     }
     if (file.size > 25 * 1024 * 1024) {
-      toast.error("File too large. Max size is 25MB")
+      toast.error("File too large. Maximum size is 25MB")
       return
     }
     setSelectedFile(file.name)
@@ -39,50 +39,93 @@ export default function FileUpload({ onValidFile }: Props) {
   }
 
   return (
-    <div
-      className={`border-2 border-dashed rounded-xl p-12 text-center transition-colors ${
-        isDragging ? "border-blue-500 bg-blue-50" : "border-gray-300"
-      } ${selectedFile ? "bg-green-50 border-green-400" : ""}`}
-      onDragOver={(e) => {
-        e.preventDefault()
-        setIsDragging(true)
-      }}
-      onDragLeave={() => setIsDragging(false)}
-      onDrop={handleDrop}
-      onClick={() => fileInputRef.current?.click()}
-    >
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept=".pdf"
-        onChange={handleFileSelect}
-        className="hidden"
-      />
-      <svg
-        className="mx-auto h-12 w-12 text-gray-400 mb-4"
-        fill="none"
-        viewBox="0 0 24 24"
-        stroke="currentColor"
-      >
-        <path
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          strokeWidth={2}
-          d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
-        />
-      </svg>
-      {selectedFile ? (
-        <div>
-          <p className="text-lg font-medium text-green-600">File loaded:</p>
-          <p className="text-sm text-gray-600 mt-1">{selectedFile}</p>
-          <p className="text-xs text-gray-500 mt-2">Click to change file</p>
+    <div style={{ display: "grid", gap: "1rem" }}>
+      <div>
+        <label className="feature-number" style={{ 
+          display: "block", 
+          marginBottom: ".5rem",
+          textAlign: "center"
+        }}>
+          Upload document
+        </label>
+        <div
+          className={`btn btn-secondary ${
+            isDragging ? "bg-gray-100" : ""
+          }`}
+          style={{
+            width: "100%",
+            textAlign: "center",
+            borderColor: selectedFile ? "var(--athena-accent)" : isDragging ? "black" : "var(--athena-gray-300)",
+            background: selectedFile ? "var(--athena-gray-50)" : isDragging ? "var(--athena-gray-100)" : "white",
+            cursor: "pointer",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: "0.5rem"
+          }}
+          onDragOver={(e) => {
+            e.preventDefault()
+            setIsDragging(true)
+          }}
+          onDragLeave={() => setIsDragging(false)}
+          onDrop={handleDrop}
+          onClick={() => fileInputRef.current?.click()}
+        >
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".pdf"
+            onChange={handleFileSelect}
+            className="hidden"
+          />
+          
+          {selectedFile ? (
+            <>
+              <svg
+                className="h-4 w-4"
+                style={{ color: "var(--athena-accent)" }}
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={2}
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                />
+              </svg>
+              <span style={{ fontSize: "14px" }}>{selectedFile}</span>
+            </>
+          ) : (
+            <>
+              <svg
+                className="h-4 w-4"
+                style={{ color: "var(--athena-gray-600)" }}
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={1.5}
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M18.375 12.739l-7.693 7.693a4.5 4.5 0 01-6.364-6.364l10.94-10.94A3 3 0 1119.5 7.372L8.552 18.32m.009-.01l-.01.01m5.699-9.941l-7.81 7.81a1.5 1.5 0 002.112 2.13"
+                />
+              </svg>
+              <span>{isDragging ? "Drop PDF here" : "Choose PDF file"}</span>
+            </>
+          )}
         </div>
-      ) : (
-        <>
-          <p className="text-lg font-medium">Drop your PDF here or click to browse</p>
-          <p className="text-sm text-gray-500 mt-2">PDF only • up to 25MB</p>
-        </>
-      )}
+        {selectedFile && (
+          <div className="upload-subtext" style={{ 
+            marginTop: "0.25rem",
+            textAlign: "center"
+          }}>
+            Click to replace file
+          </div>
+        )}
+      </div>
     </div>
   )
 }
